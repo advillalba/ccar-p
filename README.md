@@ -2,6 +2,8 @@
 
 A Go, PostgreSQL, and Astro foundation for focused study notes, practice exams, and offline exports. Seed content is independently authored and is not official CCAR-P material.
 
+**→ [Practice now — 822 questions, instant grading, no signup](https://advillalba.github.io/ccar-p/site/)**
+
 **Live practice, no setup:** the public dump also powers a static practice site (822 questions, 4 difficulty levels, instant grading, progress kept in your browser). Every push to `main` deploys it via [`.github/workflows/gh-pages.yml`](.github/workflows/gh-pages.yml) — enable *Settings → Pages → Source: GitHub Actions* once. Serve it locally with:
 
 ```sh
