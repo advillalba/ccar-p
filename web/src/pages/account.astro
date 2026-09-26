@@ -1,0 +1,63 @@
+---
+export const prerender = false;
+import Public from '../layouts/Public.astro';
+import DeleteAccount from '../islands/DeleteAccount';
+import { BACKEND_URL } from 'astro:env/server';
+
+const cookie = Astro.request.headers.get('cookie') ?? '';
+let user: any = null;
+let authRequired = false;
+try {
+  const res = await fetch(`${BACKEND_URL}/api/v1/me`, { headers: cookie ? { cookie } : {} });
+  if (res.status === 401 || res.status === 403) authRequired = true;
+  else if (res.ok) {
+    const env: any = await res.json();
+    user = env?.data ?? null;
+  } else authRequired = true;
+} catch { authRequired = true; }
+
+const breadcrumbs = [{ label: 'Home', href: '/' }, { label: 'Account' }];
+---
+<Public title="My account" current={null} breadcrumbs={breadcrumbs}>
+  <section class="page" aria-labelledby="account-title">
+    <div class="page-head">
+      <p class="eyebrow">Account</p>
+      <h1 id="account-title">My account</h1>
+      <p class="page-head__lead">Manage your session and your data. From here you can delete your user and all your progress.</p>
+    </div>
+
+    {authRequired && (
+      <div class="empty">
+        <h2>Sign in required</h2>
+        <p><a href="/login">Sign in</a> to view your account.</p>
+      </div>
+    )}
+
+    {!authRequired && user && (
+      <div style="display:grid;gap:1.5rem">
+        <div class="card">
+          <h2 style="margin:0 0 .5rem">Perfil</h2>
+          <dl class="meta">
+            <div><dt>User</dt><dd class="num">{user.email}</dd></div>
+            <div><dt>Name</dt><dd>{user.display_name}</dd></div>
+            <div><dt>Role</dt><dd><span class="badge badge--outline">{user.role}</span></dd></div>
+            <div><dt>Created</dt><dd>{new Date(user.created_at).toLocaleDateString()}</dd></div>
+          </dl>
+          <p class="muted" style="margin:.5rem 0 0;font-size:.9em">Your practice progress is stored in the database when signed in, otherwise in the <code>ccarp_practice</code> cookie.</p>
+          <div style="margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap">
+            <a class="btn btn--secondary" href="/stats">View statistics</a>
+            <a class="btn btn--secondary" href="/practice">Go to practice</a>
+            <a class="btn btn--secondary" href="/login">Switch account</a>
+          </div>
+        </div>
+
+        <DeleteAccount client:load />
+
+        <div class="card">
+          <h2 style="margin:0 0 .5rem">Privacy</h2>
+          <p class="muted" style="margin:0">We use cookies for session, CSRF and practice progress. You can reset your progress from each practice level with the <em>Reset progress</em> button, or delete your whole account here.</p>
+        </div>
+      </div>
+    )}
+  </section>
+</Public>

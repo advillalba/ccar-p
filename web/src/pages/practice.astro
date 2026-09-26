@@ -1,0 +1,35 @@
+---
+export const prerender = false;
+import Public from '../layouts/Public.astro';
+import PracticeHub from '../islands/PracticeHub';
+import { apiGet, type Domain } from '../lib';
+
+const breadcrumbs = [{ label: 'Home', href: '/' }, { label: 'Practice' }];
+
+const levels = [
+  { slug: 'beginner', label: 'Beginner', pitch: 'Foundational questions to build confidence.', badge: 'badge--success' },
+  { slug: 'intermediate', label: 'Intermediate', pitch: 'Core exam practice at regular pace.', badge: 'badge--warning' },
+  { slug: 'advanced', label: 'Advanced', pitch: 'Hard questions that demand careful reasoning.', badge: 'badge--danger' },
+  { slug: 'exam_scenarios', label: 'Exam Scenarios', pitch: 'Full exam simulations with realistic scenarios — the ultimate challenge.', badge: 'badge--exam-scenarios' }
+];
+
+const domainsResult = await apiGet<Domain[]>('/api/v1/domains', Astro.request.headers.get('cookie'));
+const domains = domainsResult.ok && domainsResult.data ? domainsResult.data : [];
+---
+<Public title="Continuous practice" current="practice" breadcrumbs={breadcrumbs}>
+  <section class="page" aria-labelledby="practice-title">
+    <div class="page-head">
+      <p class="eyebrow">Practice</p>
+      <h1 id="practice-title">Continuous practice</h1>
+      <p class="page-head__lead">Study one question at a time with instant answers &mdash; no score, no finishing. Your progress is remembered in this browser. Pick a difficulty and optionally filter by domain.</p>
+    </div>
+    <PracticeHub client:load domains={domains} levels={levels} />
+    <div class="card" style="margin-top:1rem;display:flex;justify-content:space-between;align-items:center;gap:.5rem;flex-wrap:wrap">
+      <div>
+        <strong>Want to review mistakes?</strong>
+        <p class="muted" style="margin:.2rem 0 0;font-size:.9em">Review all your answers with a direct filter to incorrect ones.</p>
+      </div>
+      <a class="btn btn--primary" href="/review">Open review</a>
+    </div>
+  </section>
+</Public>

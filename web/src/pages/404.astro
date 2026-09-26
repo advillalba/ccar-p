@@ -1,0 +1,29 @@
+---
+import Public from '../layouts/Public.astro';
+import type { BreadcrumbItem } from '../lib';
+
+const staticMode = true;
+
+const publicBase = (import.meta.env as unknown as Record<string, string | undefined>).PUBLIC_BASE_PATH ?? '';
+const basePath = `${publicBase}/site`;
+
+const breadcrumbs: BreadcrumbItem[] = [
+  { label: 'Home', href: `${basePath}/` },
+  { label: 'Page not found' }
+];
+---
+<Public title="Page not found" current={null} breadcrumbs={breadcrumbs} staticMode={staticMode}>
+  <section class="page" aria-labelledby="missing-title">
+    <div class="page-head">
+      <p class="eyebrow">Error 404</p>
+      <h1 id="missing-title">Page not found</h1>
+      <p class="page-head__lead">The page you were looking for does not exist here. Taking you to the practice hub&hellip;</p>
+    </div>
+    <p><a class="btn btn--primary" href={`${basePath}/`}>Go to practice</a></p>
+  </section>
+</Public>
+{staticMode && (
+  <script is:inline define:vars={{ redirectTarget: `${basePath}/` }}>
+    location.replace(redirectTarget);
+  </script>
+)}

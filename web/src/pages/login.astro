@@ -1,0 +1,62 @@
+---
+export const prerender = false;
+import { BACKEND_URL } from 'astro:env/server';
+import Public from '../layouts/Public.astro';
+
+const url = new URL(Astro.request.url);
+const next = url.searchParams.get('next');
+const safeNext = next?.startsWith('/') && !next.startsWith('//') ? next : '/attempts';
+const errorCode = url.searchParams.get('error');
+const summary = errorCode === 'authentication_required' ? 'Sign in to continue.' : errorCode ? 'Sign in was not completed. Check your details and try again.' : null;
+let csrfToken = '';
+let initError = '';
+try {
+  const response = await fetch(`${BACKEND_URL}/api/v1/auth/csrf`);
+  const envelope = response.ok ? await response.json() : null;
+  csrfToken = envelope?.data?.csrf_token ?? '';
+  const setCookie = response.headers.get('set-cookie');
+  if (setCookie) Astro.response.headers.append('set-cookie', setCookie);
+  if (!csrfToken) initError = 'Unable to load the sign-in form right now.';
+} catch {
+  initError = 'Unable to load the sign-in form right now.';
+}
+---
+<Public title="Sign in" breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'Sign in' }]}>
+  <section class="page" aria-labelledby="login-title">
+    <div class="card auth-card">
+      <h1 id="login-title">Sign in</h1>
+      <p class="page-head__lead">Your attempts and progress are saved to your account.</p>
+      {initError ? (
+        <div class="alert alert--error" role="alert"><p>{initError}</p></div>
+      ) : (
+        <form id="login-form" method="post" action="/api/v1/auth/login" data-json data-success={safeNext} novalidate>
+          <input type="hidden" name="csrf_token" value={csrfToken} />
+          <div class="form">
+            <div data-form-status role="status" aria-live="polite">{summary}</div>
+            <div class="field">
+              <label for="email">Username or email</label>
+              <input id="email" name="email" type="text" autocomplete="username" required spellcheck="false" />
+            </div>
+            <div class="field">
+              <label for="password">Password</label>
+              <input id="password" name="password" type="password" autocomplete="current-password" required />
+            </div>
+            <label class="field field--check"><input type="checkbox" name="remember" value="true" checked /> Remember me on this device</label>
+            <button type="submit" class="btn btn--primary btn--block">Sign in</button>
+            <noscript><p class="noscript-note">Sign-in submission uses the standard server form. If your browser shows JSON after submission, enable JavaScript or return here after signing in.</p></noscript>
+          </div>
+        </form>
+      )}
+      <p>Need an account? <a href="/register">Create one.</a></p>
+    </div>
+  </section>
+</Public>
+<style>
+  .auth-card {
+    width: 100%;
+    max-width: 24rem;
+    margin-inline: auto;
+    display: grid;
+    gap: 1.1rem;
+  }
+</style>

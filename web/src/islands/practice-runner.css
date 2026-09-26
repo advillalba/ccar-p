@@ -1,0 +1,112 @@
+.practice-runner {
+  display: grid;
+  gap: 1.1rem;
+  align-content: start;
+}
+
+.practice-runner__progress {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.practice-runner__form,
+.practice-runner__graded {
+  display: grid;
+  gap: 1rem;
+}
+
+.practice-runner__fieldset {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.practice-runner__fieldset h2,
+.practice-runner__fieldset p {
+  margin: 0;
+}
+
+.practice-runner__fieldset .options li {
+  margin: 0;
+}
+
+.practice-runner__feedback {
+  display: grid;
+  gap: 0.9rem;
+  animation: practice-runner-fade-in 160ms var(--ease) both;
+}
+
+@keyframes practice-runner-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.practice-runner__feedback > p {
+  margin: 0;
+}
+
+.practice-runner__feedback .callout ul {
+  margin: 0.4rem 0 0;
+  padding: 0 0 0 1.25rem;
+}
+
+.practice-runner__feedback .callout li {
+  margin: 0.15em 0;
+}
+
+.practice-runner__feedback .callout a {
+  overflow-wrap: anywhere;
+}
+
+.practice-runner__option-body {
+  min-width: 0;
+}
+
+.practice-runner__done {
+  display: grid;
+  gap: 0.45rem;
+  justify-items: start;
+}
+
+.practice-runner__done h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.practice-runner__score {
+  margin: 0;
+  font-size: 1.55rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.practice-runner__done .btnrow {
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 26rem) {
+  .practice-runner__done {
+    justify-items: stretch;
+  }
+
+  .practice-runner__done .btnrow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .practice-runner__feedback {
+    animation: none;
+  }
+}

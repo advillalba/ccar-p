@@ -1,0 +1,80 @@
+---
+export const prerender = false;
+import Public from '../../layouts/Public.astro';
+import { apiGet, cookieFromRequest, formatDate, isAuthRequired, isServiceUnavailable, normalizeAttemptSummary, type AttemptSummary } from '../../lib';
+
+const cookie = cookieFromRequest(Astro.request);
+
+const result = await apiGet<AttemptSummary[]>('/api/v1/attempts', cookie);
+
+const breadcrumbs = [
+  { label: 'Home', href: '/' },
+  { label: 'Attempts' }
+];
+
+const unavailable = isServiceUnavailable(result);
+const authRequired = isAuthRequired(result);
+
+const attempts: AttemptSummary[] = result.ok && result.data ? result.data.map(normalizeAttemptSummary) : [];
+
+const inProgress = attempts.filter(attempt => attempt.status === 'in_progress');
+const completed = attempts.filter(attempt => attempt.status === 'completed');
+const orderedAttempts = [...inProgress, ...completed];
+
+function statusBadge(attempt: AttemptSummary): { className: string; label: string } {
+  if (attempt.status === 'in_progress') return { className: 'badge badge--outline', label: 'In progress' };
+  if (attempt.passed === true) return { className: 'badge badge--success', label: 'Passed' };
+  if (attempt.passed === false) return { className: 'badge badge--danger', label: 'Did not pass' };
+  return { className: 'badge badge--outline', label: 'Completed' };
+}
+---
+<Public title="Attempts" current="attempts" breadcrumbs={breadcrumbs}>
+  <section class="page" aria-labelledby="attempts-title">
+    <header class="page-head">
+      <p class="eyebrow">History</p>
+      <h1 id="attempts-title">My attempts</h1>
+      <p class="page-head__lead">Track your in-progress and submitted practice exam attempts. Your attempts are private to your account.</p>
+    </header>
+    {unavailable && <div class="alert alert--error" role="alert"><p>We could not load your attempts right now. Please try again in a moment.</p></div>}
+    {!unavailable && authRequired && (
+      <div class="empty">
+        <h2>Sign in to see your attempts</h2>
+        <p>Your saved attempts live on your account. You can still <a href="/exams">take a practice exam</a> without signing in, or <a href="/login">sign in</a> to review your history.</p>
+      </div>
+    )}
+    {!unavailable && !authRequired && attempts.length === 0 && (
+      <div class="empty">
+        <h2>No attempts yet</h2>
+        <p>Start a practice exam to begin tracking your progress.</p>
+        <a class="btn btn--primary" href="/exams">Browse exams</a>
+      </div>
+    )}
+    {orderedAttempts.length > 0 && (
+      <div class="list">
+        {orderedAttempts.map(attempt => {
+          const badge = statusBadge(attempt);
+          return (
+            <a class="list-row list-row--link" href={`/attempts/${attempt.id}`}>
+              <div class="list-row__body">
+                <span class="list-row__title">{attempt.exam_title}</span>
+                <div class="list-row__meta">
+                  <span class={badge.className}>{badge.label}</span>
+                  {attempt.status === 'completed' && typeof attempt.score_percentage === 'number' && (
+                    <span class="num">{attempt.score_percentage.toFixed(0)}%</span>
+                  )}
+                  {attempt.status === 'in_progress' && (
+                    <span>Started <time datetime={attempt.started_at}>{formatDate(attempt.started_at)}</time></span>
+                  )}
+                  {attempt.status === 'completed' && attempt.submitted_at && (
+                    <span>Submitted <time datetime={attempt.submitted_at}>{formatDate(attempt.submitted_at)}</time></span>
+                  )}
+                </div>
+              </div>
+              <span class="list-row__chev" aria-hidden="true">›</span>
+            </a>
+          );
+        })}
+      </div>
+    )}
+  </section>
+</Public>

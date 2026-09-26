@@ -1,0 +1,256 @@
+---
+export const prerender = false;
+import Public from '../../layouts/Public.astro';
+import ExamRunner from '../../islands/ExamRunner';
+import { apiGet, cookieFromRequest, cookieValue, formatDate, formatPercentage, isAuthRequired, isNotFound, isServiceUnavailable, normalizeAttempt, referenceHref, type AttemptDetail, type AttemptAnswer, type BreadcrumbItem } from '../../lib';
+
+const { id } = Astro.params;
+
+if (!id || typeof id !== 'string') {
+  return new Response('Not found', { status: 404 });
+}
+
+const cookie = cookieFromRequest(Astro.request);
+const result = await apiGet<AttemptDetail>(`/api/v1/attempts/${encodeURIComponent(id)}`, cookie);
+
+const breadcrumbs: BreadcrumbItem[] = [
+  { label: 'Home', href: '/' },
+  { label: 'Attempts', href: '/attempts' },
+  { label: '...' }
+];
+
+let attempt: AttemptDetail | null = null;
+const unavailable = isServiceUnavailable(result);
+const notFound = isNotFound(result);
+const authRequired = isAuthRequired(result);
+
+if (result.ok && result.data) {
+  attempt = normalizeAttempt(result.data);
+  breadcrumbs[2] = { label: attempt.exam_title };
+}
+
+const questions: AttemptAnswer[] = attempt?.questions ?? [];
+const isComplete = attempt?.status === 'completed';
+const isInProgress = attempt?.status === 'in_progress';
+const showRunner = isInProgress && questions.length > 0;
+const showReview = isComplete && questions.length > 0;
+const csrfToken = cookieValue(Astro.request, 'ccarp_csrf');
+const score = attempt?.score_percentage;
+const scoreWidth = Math.max(0, Math.min(100, score ?? 0));
+const scoreTone = attempt?.passed === true ? 'progress__fill--success' : attempt?.passed === false ? 'progress__fill--danger' : '';
+---
+<Public title={attempt ? `Attempt: ${attempt.exam_title}` : 'Attempt'} current="attempts" breadcrumbs={breadcrumbs}>
+  {notFound && (
+    <section class="page" aria-labelledby="missing-title">
+      <div class="page-head">
+        <p class="eyebrow">Attempts</p>
+        <h1 id="missing-title">Attempt not available</h1>
+      </div>
+      <p>This attempt does not exist or is not yours. <a href="/attempts">View your attempts</a>.</p>
+    </section>
+  )}
+  {authRequired && !notFound && !unavailable && (
+    <section class="page" aria-labelledby="auth-title">
+      <div class="page-head">
+        <p class="eyebrow">Attempts</p>
+        <h1 id="auth-title">Attempt not available</h1>
+      </div>
+      <p>This attempt is not accessible from this browser. Start a <a href="/exams">practice exam</a> or <a href="/login">sign in</a> to see your saved attempts.</p>
+    </section>
+  )}
+  {unavailable && !notFound && (
+    <section class="page" aria-labelledby="unavailable-title">
+      <div class="page-head">
+        <p class="eyebrow">Attempts</p>
+        <h1 id="unavailable-title">Attempt temporarily unavailable</h1>
+      </div>
+      <p role="alert" aria-live="assertive">The attempt service is not responding. Please try again in a moment.</p>
+    </section>
+  )}
+  {attempt && !notFound && !unavailable && (
+    <article class="page" aria-labelledby="attempt-title">
+      <header class="page-head">
+        <p class="eyebrow">{isComplete ? 'Submitted attempt' : 'In progress'}</p>
+        <h1 id="attempt-title">{attempt.exam_title}</h1>
+        <p class="page-head__lead">
+          Started <time datetime={attempt.started_at}>{formatDate(attempt.started_at)}</time>
+          {attempt.submitted_at && <> · Submitted <time datetime={attempt.submitted_at}>{formatDate(attempt.submitted_at)}</time></>}
+        </p>
+      </header>
+
+      {isComplete && (
+        <section class="card attempt-result" aria-labelledby="summary-title">
+          <h2 id="summary-title">Result</h2>
+          <dl class="meta">
+            <div>
+              <dt>Score</dt>
+              <dd class="num">{formatPercentage(score, 1)}</dd>
+            </div>
+            <div>
+              <dt>Correct</dt>
+              <dd class="num">{attempt.correct_count ?? 0} of {attempt.total_questions}</dd>
+            </div>
+            {typeof attempt.pass_percentage === 'number' && (
+              <div>
+                <dt>Pass mark</dt>
+                <dd class="num">{formatPercentage(attempt.pass_percentage, 0)}</dd>
+              </div>
+            )}
+          </dl>
+          <div class="progress" role="progressbar" aria-valuenow={Math.round(scoreWidth)} aria-valuemin={0} aria-valuemax={100} aria-label="Score">
+            <div class={`progress__fill ${scoreTone}`} style={`width: ${scoreWidth}%`}></div>
+          </div>
+          {typeof attempt.passed === 'boolean' && (
+            <p class={`verdict ${attempt.passed ? 'verdict--correct' : 'verdict--incorrect'}`}>{attempt.passed ? 'Passed' : 'Did not pass'}</p>
+          )}
+        </section>
+      )}
+
+      {showRunner && (
+        <section aria-labelledby="runner-title">
+          <h2 id="runner-title" class="visually-hidden">Answer questions</h2>
+          <ExamRunner
+            client:load
+            attemptId={id}
+            questions={questions.map(question => ({ id: question.id, prompt: question.prompt, scenario: question.scenario, options: question.options, selectedOptionIds: question.selected_option_ids ?? [], isCorrect: question.is_correct ?? null, correctOptionIds: question.correct_option_ids ?? [], references: question.references ?? [] }))}
+            csrf={csrfToken}
+          />
+        </section>
+      )}
+
+      {isInProgress && questions.length === 0 && (
+        <div class="empty">
+          <h2>No questions</h2>
+          <p>This attempt has no questions. <a href="/exams">Pick another exam</a>.</p>
+        </div>
+      )}
+
+      {showReview && (
+        <section class="section" aria-labelledby="review-title">
+          <h2 id="review-title">Review</h2>
+          <ol class="list review-list">
+            {questions.map((question, index) => {
+              const unanswered = (question.selected_option_ids?.length ?? 0) === 0;
+              const indicatorClass = unanswered ? 'badge--outline' : question.is_correct ? 'badge--success' : 'badge--danger';
+              const indicatorLabel = unanswered ? 'Unanswered' : question.is_correct ? 'Correct' : 'Incorrect';
+              return (
+                <li class="card">
+                  <div class="review-head">
+                    <span class={`badge ${indicatorClass}`}>{indicatorLabel}</span>
+                    <span class="muted">Question {index + 1} of {questions.length}</span>
+                  </div>
+                  {question.scenario && <p class="scenario">{question.scenario}</p>}
+                  <h3 class="prompt">{question.prompt}</h3>
+                  <ol class="options">
+                    {question.options.map(option => {
+                      const isSelected = (question.selected_option_ids ?? []).includes(option.id);
+                      const isCorrect = (question.correct_option_ids ?? []).includes(option.id);
+                      const classes = ['opt', 'opt--locked'];
+                      if (isCorrect) classes.push('opt--correct');
+                      if (isSelected && !isCorrect) classes.push('opt--incorrect');
+                      const showExplanation = option.explanation && (isCorrect || isSelected);
+                      return (
+                        <li>
+                          <div class={classes.join(' ')}>
+                            <span class="opt__key" aria-hidden="true">{option.key}.</span>
+                            <div class="attempt-option-body">
+                              <span>{option.text}</span>
+                              {showExplanation && <p class="opt__explanation">{option.explanation}</p>}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                  {question.explanation && (
+                    <div class="callout">
+                      <strong>Explanation.</strong> {question.explanation}
+                    </div>
+                  )}
+                  {question.references && question.references.length > 0 && (
+                    <div class="callout callout--muted">
+                      <strong>References.</strong>
+                      <ul>
+                        {question.references.map(reference => {
+                          const href = referenceHref(reference);
+                          return (
+                            <li>
+                              <span>{reference.title}</span>
+                              {href && (
+                                <>
+                                  {' — '}
+                                  <a href={href} rel="noopener noreferrer">{reference.url}</a>
+                                </>
+                              )}
+                              {reference.citation && <span> ({reference.citation})</span>}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
+
+      {isComplete && (
+        <nav class="btnrow" aria-label="After review">
+          <a class="btn btn--secondary" href="/attempts">Back to attempts</a>
+          <a class="btn btn--secondary" href="/exams">Practice another exam</a>
+        </nav>
+      )}
+    </article>
+  )}
+</Public>
+
+<style>
+  .attempt-result {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .attempt-result > * {
+    margin: 0;
+  }
+
+  .attempt-result .progress,
+  .attempt-result .meta {
+    justify-self: stretch;
+  }
+
+  .review-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .review-list .card {
+    display: grid;
+    gap: 0.85rem;
+    justify-items: start;
+  }
+
+  .review-list .card > * {
+    margin: 0;
+  }
+
+  .review-list .card .options {
+    justify-self: stretch;
+  }
+
+  .review-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    align-items: center;
+    justify-content: space-between;
+    justify-self: stretch;
+  }
+
+  .attempt-option-body {
+    min-width: 0;
+  }
+</style>

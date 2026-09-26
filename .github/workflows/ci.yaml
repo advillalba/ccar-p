@@ -1,0 +1,89 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  GOPATH: /tmp/gopath
+  GO_VERSION: '1.24'
+  NODE_VERSION: '22'
+
+jobs:
+  backend:
+    name: Backend (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+      - name: Install OpenSpec CLI
+        run: |
+          curl -fsSL https://github.com/CCAR-P/OpenSpec/releases/latest/download/openspec_linux_amd64 -o /usr/local/bin/openspec
+          chmod +x /usr/local/bin/openspec
+          openspec --version
+      - name: Run OpenSpec validation
+        run: openspec validate --changes --strict
+       - name: Check formatting
+         run: test -z "$(gofmt -l cmd internal)"
+       - name: go vet
+         run: go vet ./...
+       - name: go test
+         run: go test ./...
+
+      - name: go build
+        run: go build ./...
+
+  frontend:
+    name: Frontend (Astro)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Astro typecheck
+        run: npm run check
+       - name: Astro build
+         run: npm run build
+       - name: Browser accessibility and viewport tests
+         run: npx playwright install --with-deps chromium && npm test
+
+  compose-integration:
+    name: Compose integration
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose file
+        run: docker compose config --quiet
+       - name: Build Compose images
+         run: docker compose build frontend backend
+       - name: Start database and apply migrations
+         run: |
+           POSTGRES_PASSWORD=ci-password SESSION_SECRET=ci-session-secret-with-at-least-32-characters MCP_SERVICE_TOKEN_HASH=$(printf ci-token | sha256sum | cut -d ' ' -f 1) docker compose up -d database
+           POSTGRES_PASSWORD=ci-password SESSION_SECRET=ci-session-secret-with-at-least-32-characters MCP_SERVICE_TOKEN_HASH=$(printf ci-token | sha256sum | cut -d ' ' -f 1) docker compose run --rm backend migrate
+       - name: Verify migrated schema
+         run: |
+           POSTGRES_PASSWORD=ci-password SESSION_SECRET=ci-session-secret-with-at-least-32-characters MCP_SERVICE_TOKEN_HASH=$(printf ci-token | sha256sum | cut -d ' ' -f 1) docker compose exec -T database psql -U ccarp -d ccarp -c "SELECT to_regclass('public.users'), to_regclass('public.notes'), to_regclass('public.exams'), to_regclass('public.attempts');"
+       - name: Stop Compose services
+         if: always()
+         run: docker compose down --volumes
+

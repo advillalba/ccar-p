@@ -1,0 +1,16 @@
+---
+export const prerender = false;
+import Public from '../layouts/Public.astro';
+import ReviewPractice from '../islands/ReviewPractice';
+const breadcrumbs = [{ label: 'Home', href: '/' }, { label: 'Review' }];
+---
+<Public title="Review — answered questions" current="practice" breadcrumbs={breadcrumbs}>
+  <section class="page" aria-labelledby="review-title">
+    <div class="page-head">
+      <p class="eyebrow">Review</p>
+      <h1 id="review-title">Review your answers</h1>
+      <p class="page-head__lead">All the practice questions you have answered, with a direct filter to incorrect ones to review mistakes.</p>
+    </div>
+    <ReviewPractice client:load />
+  </section>
+</Public>

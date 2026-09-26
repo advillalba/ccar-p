@@ -1,0 +1,17 @@
+---
+export const prerender = false;
+import Public from '../layouts/Public.astro';
+import UserStats from '../islands/UserStats';
+
+const breadcrumbs = [{ label: 'Home', href: '/' }, { label: 'Statistics' }];
+---
+<Public title="Statistics" current="attempts" breadcrumbs={breadcrumbs}>
+  <section class="page" aria-labelledby="stats-title">
+    <header class="page-head">
+      <p class="eyebrow">Progress</p>
+      <h1 id="stats-title">My statistics</h1>
+      <p class="page-head__lead">Practice progress by level and domain, plus recent exam results.</p>
+    </header>
+    <UserStats client:load />
+  </section>
+</Public>

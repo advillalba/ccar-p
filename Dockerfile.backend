@@ -1,0 +1,21 @@
+FROM golang:1.27.1-alpine3.23 AS build
+WORKDIR /src
+COPY go.mod go.sum* ./
+RUN go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+COPY db ./db
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/migrate ./cmd/migrate && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/seed ./cmd/seed && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/server-maint ./cmd/server-maint
+
+FROM alpine:3.23.3
+RUN addgroup -S app && adduser -S -G app app
+COPY --from=build /out/server /usr/local/bin/server
+COPY --from=build /out/migrate /usr/local/bin/migrate
+COPY --from=build /out/seed /usr/local/bin/seed
+COPY --from=build /out/server-maint /usr/local/bin/server-maint
+COPY --from=build /src/db/migrations /app/db/migrations
+COPY --from=build /src/db/public-dump /app/db/public-dump
+USER app
+WORKDIR /app
+EXPOSE 8080
+CMD ["server"]

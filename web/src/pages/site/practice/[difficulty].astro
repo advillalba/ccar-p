@@ -1,0 +1,57 @@
+---
+import Public from '../../../layouts/Public.astro';
+import PracticeRunner from '../../../islands/PracticeRunner';
+import { practiceDifficulties, practiceQuestionsByDifficulty, allDomains, type PracticeDifficulty } from '../../../data/dump';
+import { formatDifficulty, type BreadcrumbItem } from '../../../lib';
+
+export function getStaticPaths() {
+  return practiceDifficulties.map(difficulty => ({ params: { difficulty } }));
+}
+
+const requested = Astro.params.difficulty;
+const difficulty = practiceDifficulties.find(value => value === requested);
+
+if (!difficulty) {
+  return new Response('Not found', { status: 404 });
+}
+
+const difficultyLabel = formatDifficulty(difficulty);
+const questions = practiceQuestionsByDifficulty[difficulty];
+
+// Only offer domains that actually have questions at this difficulty, ordered
+// like the practice hub sorts them (sort_order, then name).
+const usedDomainIds = new Set(questions.map(question => question.domain_id).filter((id): id is string => Boolean(id)));
+const domainNames = Object.fromEntries(
+  allDomains
+    .filter(domain => usedDomainIds.has(domain.id))
+    .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+    .map(domain => [domain.id, domain.name])
+);
+
+const publicBase = (import.meta.env as unknown as Record<string, string | undefined>).PUBLIC_BASE_PATH ?? '';
+const basePath = `${publicBase}/site`;
+
+const breadcrumbs: BreadcrumbItem[] = [
+  { label: 'Home', href: `${basePath}/` },
+  { label: 'Practice', href: `${basePath}/practice` },
+  { label: difficultyLabel }
+];
+---
+<Public title={`Practice: ${difficultyLabel}`} current="practice" breadcrumbs={breadcrumbs} staticMode={true}>
+  <section class="page" aria-labelledby="practice-title">
+    <div class="page-head">
+      <p class="eyebrow">Continuous practice</p>
+      <h1 id="practice-title">{difficultyLabel} practice</h1>
+      <p class="page-head__lead">Study one question at a time with instant answers. Answers are graded in your browser and progress is saved in this browser only.</p>
+    </div>
+    {questions.length === 0 ? (
+      <div class="empty">
+        <h2>No questions yet</h2>
+        <p>No questions are available for this difficulty.</p>
+        <p><a href={`${basePath}/practice`}>Back to practice</a></p>
+      </div>
+    ) : (
+      <PracticeRunner client:load difficulty={difficulty} questions={questions} gradingMode="local" basePath={basePath} domainNames={domainNames} />
+    )}
+  </section>
+</Public>

@@ -1,0 +1,128 @@
+---
+export const prerender = false;
+import Public from '../../layouts/Public.astro';
+import { apiGet, cookieFromRequest, formatDifficulty, formatTimeLimit, isServiceUnavailable, type ExamSummary } from '../../lib';
+
+const cookie = cookieFromRequest(Astro.request);
+const result = await apiGet<ExamSummary[]>('/api/v1/exams', cookie);
+const breadcrumbs = [{ label: 'Home', href: '/' }, { label: 'Exams' }];
+const unavailable = isServiceUnavailable(result);
+const exams = result.ok ? (result.data ?? []) : [];
+const query = Astro.url.searchParams.get('q')?.trim().toLocaleLowerCase() ?? '';
+const selectedDomain = Astro.url.searchParams.get('domain')?.trim() ?? '';
+const selectedDifficulty = Astro.url.searchParams.get('difficulty')?.trim() ?? '';
+const sort = Astro.url.searchParams.get('sort') === 'title' ? 'title' : 'recent';
+const domains = [...new Map(exams.flatMap(exam => exam.domains).map(domain => [domain.slug, domain])).values()].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+const difficulties = [...new Set(exams.map(exam => exam.difficulty))].sort();
+const filteredExams = exams.filter(exam => {
+  const matchesDomain = !selectedDomain || exam.domains.some(domain => domain.slug === selectedDomain);
+  const matchesDifficulty = !selectedDifficulty || exam.difficulty === selectedDifficulty;
+  const searchable = `${exam.title} ${exam.description} ${exam.domains.map(domain => domain.name).join(' ')}`.toLocaleLowerCase();
+  return matchesDomain && matchesDifficulty && (!query || searchable.includes(query));
+});
+const orderedExams = [...filteredExams].sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : (b.published_at ?? '').localeCompare(a.published_at ?? ''));
+
+function difficultyBadgeClass(difficulty: string): string {
+  if (difficulty === 'beginner' || difficulty === 'easy') return 'badge badge--success';
+  if (difficulty === 'intermediate' || difficulty === 'medium') return 'badge badge--warning';
+  if (difficulty === 'advanced' || difficulty === 'hard') return 'badge badge--danger';
+  if (difficulty === 'exam_scenarios' || difficulty === 'exam-scenarios') return 'badge badge--exam-scenarios';
+  return 'badge';
+}
+---
+<Public title="Exams" current="exams" breadcrumbs={breadcrumbs}>
+  <section class="page" aria-labelledby="exams-title">
+    <div class="page-head">
+      <p class="eyebrow">Practice</p>
+      <h1 id="exams-title">Practice exams</h1>
+      <p class="page-head__lead">Find an exam by the domains covered in its questions, its difficulty, or a keyword. Answer keys remain in the application until you finish the attempt.</p>
+    </div>
+    {unavailable && (
+      <div class="alert alert--error" role="alert" aria-live="assertive">
+        <h2>Service unavailable</h2>
+        <p>We could not load the latest exams right now. Please try again in a moment.</p>
+      </div>
+    )}
+    {!unavailable && exams.length > 0 && (
+      <form class="card form" method="get" aria-label="Filter practice exams">
+        <div class="form-row-2">
+          <div class="field">
+            <label for="exam-search">Search exams</label>
+            <input id="exam-search" type="search" name="q" value={query} />
+          </div>
+          <div class="field">
+            <label for="exam-sort">Order</label>
+            <select id="exam-sort" name="sort">
+              <option value="recent" selected={sort === 'recent'}>Most recent</option>
+              <option value="title" selected={sort === 'title'}>Title</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="exam-domain">Question domain</label>
+            <select id="exam-domain" name="domain">
+              <option value="">All domains</option>
+              {domains.map(domain => <option value={domain.slug} selected={selectedDomain === domain.slug}>{domain.name}</option>)}
+            </select>
+          </div>
+          <div class="field">
+            <label for="exam-difficulty">Difficulty</label>
+            <select id="exam-difficulty" name="difficulty">
+              <option value="">All difficulties</option>
+              {difficulties.map(difficulty => <option value={difficulty} selected={selectedDifficulty === difficulty}>{formatDifficulty(difficulty)}</option>)}
+            </select>
+          </div>
+        </div>
+        <div class="btnrow">
+          <button type="submit" class="btn btn--primary">Apply filters</button>
+          <a class="btn btn--secondary" href="/exams">Clear</a>
+        </div>
+      </form>
+    )}
+    {!unavailable && exams.length === 0 && (
+      <div class="empty">
+        <h2>No published exams yet</h2>
+        <p>Once exams are published they will appear here.</p>
+      </div>
+    )}
+    {!unavailable && exams.length > 0 && orderedExams.length === 0 && (
+      <div class="empty">
+        <h2>No matching exams</h2>
+        <p>Try a different search or <a href="/exams">clear the filters</a>.</p>
+      </div>
+    )}
+    {orderedExams.length > 0 && (
+      <div class="list" aria-label="Published exams">
+        {orderedExams.map((exam: ExamSummary) => (
+          <a class="list-row list-row--link" href={`/exams/${exam.slug}`}>
+            <div class="list-row__body">
+              <span class="list-row__title">{exam.title}</span>
+              {exam.description && <p class="clamp2 muted">{exam.description}</p>}
+              <div class="list-row__meta">
+                <span class={difficultyBadgeClass(exam.difficulty)}>{formatDifficulty(exam.difficulty)}</span>
+                <span class="num">{exam.question_count} question{exam.question_count === 1 ? '' : 's'}</span>
+                <span>{formatTimeLimit(exam.time_limit_minutes)}</span>
+                {typeof exam.pass_percentage === 'number' && <span>Pass {exam.pass_percentage}%</span>}
+                {exam.domains.map(domain => <span class="badge badge--outline">{domain.name}</span>)}
+              </div>
+            </div>
+            <span class="list-row__chev" aria-hidden="true">›</span>
+          </a>
+        ))}
+      </div>
+    )}
+  </section>
+</Public>
+
+<style>
+  .list-row__title {
+    display: block;
+  }
+
+  .list-row__body > .clamp2 {
+    margin: 0;
+  }
+
+  .list-row__meta .badge--outline {
+    background: transparent;
+  }
+</style>

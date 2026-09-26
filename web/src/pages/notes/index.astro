@@ -1,0 +1,108 @@
+---
+export const prerender = false;
+import Public from '../../layouts/Public.astro';
+import { apiGet, cookieFromRequest, formatDate, formatReadingTime, isServiceUnavailable, normalizeNote, type NoteSummary } from '../../lib';
+
+const cookie = cookieFromRequest(Astro.request);
+const result = await apiGet<NoteSummary[]>('/api/v1/notes', cookie);
+const breadcrumbs = [{ label: 'Home', href: '/' }, { label: 'Notes' }];
+const unavailable = isServiceUnavailable(result);
+const notes = result.ok ? (result.data ?? []).map(normalizeNote) : [];
+const query = Astro.url.searchParams.get('q')?.trim().toLocaleLowerCase() ?? '';
+const selectedDomain = Astro.url.searchParams.get('domain')?.trim() ?? '';
+const selectedTag = Astro.url.searchParams.get('tag')?.trim().toLocaleLowerCase() ?? '';
+const sort = Astro.url.searchParams.get('sort') === 'recent' ? 'recent' : 'domain';
+const domains = [...new Map(notes.filter(note => note.domain_slug).map(note => [note.domain_slug!, note.domain!])).values()].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+const tags = [...new Set(notes.flatMap(note => note.tags.map(tag => tag.name)))].sort((a, b) => a.localeCompare(b));
+const filteredNotes = notes.filter(note => {
+  const matchesDomain = !selectedDomain || note.domain_slug === selectedDomain;
+  const matchesTag = !selectedTag || note.tags.some(tag => tag.name.toLocaleLowerCase() === selectedTag);
+  const searchable = `${note.title} ${note.summary} ${note.domain_name ?? ''} ${note.tags.map(tag => tag.name).join(' ')}`.toLocaleLowerCase();
+  return matchesDomain && matchesTag && (!query || searchable.includes(query));
+});
+const orderedNotes = [...filteredNotes].sort((a, b) => sort === 'recent'
+  ? (b.published_at ?? '').localeCompare(a.published_at ?? '')
+  : (a.domain?.sort_order ?? Number.MAX_SAFE_INTEGER) - (b.domain?.sort_order ?? Number.MAX_SAFE_INTEGER) || a.title.localeCompare(b.title));
+const notesByDomain = new Map<string, { name: string; notes: NoteSummary[] }>();
+for (const note of orderedNotes) {
+  const key = note.domain_slug ?? 'other';
+  const group = notesByDomain.get(key) ?? { name: note.domain_name ?? 'Other notes', notes: [] };
+  group.notes.push(note);
+  notesByDomain.set(key, group);
+}
+const grouped = notes.some(note => note.domain_name);
+---
+<Public title="Notes" current="notes" breadcrumbs={breadcrumbs}>
+  <section class="page" aria-labelledby="notes-title">
+    <header class="page-head">
+      <p class="eyebrow">Reading list</p>
+      <h1 id="notes-title">Study notes</h1>
+      <p class="page-head__lead">Browse notes by study domain, then narrow the list by topic or keyword.</p>
+    </header>
+    {unavailable && <div class="alert alert--error" role="alert"><p>We could not load the latest notes right now. Please try again in a moment.</p></div>}
+    {!unavailable && result.status === 401 && <div class="alert alert--error" role="alert"><p>Some notes may require sign in. Please <a href="/login">sign in</a> if you have an account.</p></div>}
+    {!unavailable && notes.length > 0 && (
+      <form class="form" method="get" aria-label="Filter study notes">
+        <div class="form-row-2">
+          <div class="field"><label for="note-search">Search notes</label><input id="note-search" type="search" name="q" value={query} /></div>
+          <div class="field"><label for="note-domain">Domain</label><select id="note-domain" name="domain"><option value="">All domains</option>{domains.map(domain => <option value={domain.slug} selected={selectedDomain === domain.slug}>{domain.name}</option>)}</select></div>
+          <div class="field"><label for="note-tag">Tag</label><select id="note-tag" name="tag"><option value="">All tags</option>{tags.map(tag => <option value={tag} selected={selectedTag === tag.toLocaleLowerCase()}>{tag}</option>)}</select></div>
+          <div class="field"><label for="note-sort">Order</label><select id="note-sort" name="sort"><option value="domain" selected={sort === 'domain'}>Study domain</option><option value="recent" selected={sort === 'recent'}>Most recent</option></select></div>
+        </div>
+        <div class="btnrow">
+          <button type="submit" class="btn btn--primary btn--sm">Apply filters</button>
+          <a class="btn btn--secondary btn--sm" href="/notes">Clear</a>
+        </div>
+      </form>
+    )}
+    {!unavailable && notes.length === 0 && (
+      <div class="empty">
+        <h2>No published notes yet</h2>
+        <p>Once notes are published they will appear here.</p>
+      </div>
+    )}
+    {!unavailable && notes.length > 0 && orderedNotes.length === 0 && (
+      <div class="empty">
+        <h2>No matching notes</h2>
+        <p>Try a different search or <a href="/notes">clear the filters</a>.</p>
+      </div>
+    )}
+    {grouped && orderedNotes.length > 0 && [...notesByDomain.values()].map(group => (
+      <section class="section" aria-labelledby={`domain-${group.name.replace(/[^a-z0-9]+/gi, '-').toLocaleLowerCase()}`}>
+        <h2 id={`domain-${group.name.replace(/[^a-z0-9]+/gi, '-').toLocaleLowerCase()}`}>{group.name}</h2>
+        <div class="list">
+          {group.notes.map(note => (
+            <a class="list-row list-row--link" href={`/notes/${note.slug}`}>
+              <div class="list-row__body">
+                <span class="list-row__title">{note.title}</span>
+                {note.summary && <p class="clamp2">{note.summary}</p>}
+                <div class="list-row__meta">
+                  {note.domain_name && <span class="badge badge--accent">{note.domain_name}</span>}
+                  <span>{formatReadingTime(note.reading_time_minutes)}</span>
+                  {note.published_at && <time datetime={note.published_at}>{formatDate(note.published_at)}</time>}
+                </div>
+              </div>
+            </a>
+          ))}
+        </div>
+      </section>
+    ))}
+    {!grouped && orderedNotes.length > 0 && (
+      <div class="list">
+        {orderedNotes.map(note => (
+          <a class="list-row list-row--link" href={`/notes/${note.slug}`}>
+            <div class="list-row__body">
+              <span class="list-row__title">{note.title}</span>
+              {note.summary && <p class="clamp2">{note.summary}</p>}
+              <div class="list-row__meta">
+                {note.domain_name && <span class="badge badge--accent">{note.domain_name}</span>}
+                <span>{formatReadingTime(note.reading_time_minutes)}</span>
+                {note.published_at && <time datetime={note.published_at}>{formatDate(note.published_at)}</time>}
+              </div>
+            </div>
+          </a>
+        ))}
+      </div>
+    )}
+  </section>
+</Public>

@@ -1,0 +1,83 @@
+---
+export const prerender = false;
+import Public from '../layouts/Public.astro';
+import { apiGet, cookieFromRequest, formatReadingTime, normalizeNote, type NoteSummary } from '../lib';
+
+const cookie = cookieFromRequest(Astro.request);
+const result = await apiGet<NoteSummary[]>('/api/v1/notes', cookie);
+const latestNotes = result.ok
+  ? (result.data ?? [])
+      .map(normalizeNote)
+      .sort((a, b) => (b.published_at ?? b.updated_at ?? '').localeCompare(a.published_at ?? a.updated_at ?? ''))
+      .slice(0, 3)
+  : [];
+
+const tiles: { href: string; label: string; hint: string; paths: string }[] = [
+  {
+    href: '/notes',
+    label: 'Notes',
+    hint: 'Study notes by domain',
+    paths: '<path d="M4 19.5V5.5A2.5 2.5 0 0 1 6.5 3H20v14.5"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-4.5"/><path d="M8.5 7.5h7M8.5 11h4.5"/>'
+  },
+  {
+    href: '/exams',
+    label: 'Exams',
+    hint: 'Full practice exams',
+    paths: '<rect x="4.5" y="3.5" width="15" height="17.5" rx="2.5"/><path d="M8.5 8.5h7M8.5 12.5h7M8.5 16.5h4"/>'
+  },
+  {
+    href: '/practice',
+    label: 'Practice',
+    hint: 'Drill by difficulty',
+    paths: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.25"/><path d="M12 12h.01"/>'
+  },
+  {
+    href: '/attempts',
+    label: 'Results',
+    hint: 'Scores and history',
+    paths: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3.2 1.9"/>'
+  }
+];
+---
+<Public title="CCAR-P Study Platform" current="home" description="Focused CCAR-P study notes and practice exams.">
+  <section class="page" aria-labelledby="home-title">
+    <header class="page-head">
+      <p class="eyebrow">CCAR-P Study</p>
+      <h1 id="home-title">Prepare with clarity.</h1>
+      <p class="page-head__lead">Read domain-organized study notes, practice with confidential answer keys, and take timed exams under exam-day conditions.</p>
+    </header>
+    <div class="btnrow">
+      <a class="btn btn--primary" href="/practice">Start practicing</a>
+      <a class="btn btn--secondary" href="/notes">Browse notes</a>
+    </div>
+    <div class="tile-grid">
+      {tiles.map(tile => (
+        <a class="card card--interactive tile" href={tile.href}>
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" set:html={tile.paths} />
+          <span class="tile__label">{tile.label}</span>
+          <span class="tile__hint">{tile.hint}</span>
+        </a>
+      ))}
+    </div>
+    {!result.ok && <div class="callout callout--muted" role="alert"><p>Latest notes are unavailable right now.</p></div>}
+    {result.ok && latestNotes.length > 0 && (
+      <section class="section" aria-labelledby="latest-notes-title">
+        <h2 id="latest-notes-title">Latest notes</h2>
+        <div class="list">
+          {latestNotes.map(note => (
+            <a class="list-row list-row--link" href={`/notes/${note.slug}`}>
+              <div class="list-row__body">
+                <span class="list-row__title">{note.title}</span>
+                {note.summary && <p class="clamp2">{note.summary}</p>}
+                <div class="list-row__meta">
+                  {note.domain_name && <span class="badge badge--accent">{note.domain_name}</span>}
+                  <span>{formatReadingTime(note.reading_time_minutes)}</span>
+                </div>
+              </div>
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+  </section>
+</Public>

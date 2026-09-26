@@ -1,0 +1,31 @@
+---
+import Public from '../../layouts/Public.astro';
+import StaticPracticeHub from '../../islands/static/StaticPracticeHub';
+import { countsByDifficulty } from '../../data/dump';
+import type { BreadcrumbItem } from '../../lib';
+
+const publicBase = (import.meta.env as unknown as Record<string, string | undefined>).PUBLIC_BASE_PATH ?? '';
+const basePath = `${publicBase}/site`;
+
+const breadcrumbs: BreadcrumbItem[] = [
+  { label: 'Home', href: `${basePath}/` },
+  { label: 'Practice' }
+];
+---
+<Public title="Continuous practice" current="practice" breadcrumbs={breadcrumbs} staticMode={true}>
+  <section class="page" aria-labelledby="practice-title">
+    <div class="page-head">
+      <p class="eyebrow">Practice</p>
+      <h1 id="practice-title">Continuous practice</h1>
+      <p class="page-head__lead">Study one question at a time with instant answers &mdash; no score, no finishing. Answers are graded in your browser; you can filter by domain inside each difficulty.</p>
+    </div>
+    <StaticPracticeHub counts={countsByDifficulty} basePath={basePath} />
+    <div class="card" style="margin-top:1rem">
+      <strong>Independent, unofficial study material.</strong>
+      <p class="muted" style="margin:.2rem 0 0;font-size:.9em">
+        A read-only snapshot of the practice bank, published to GitHub Pages. Verify everything against authoritative sources.
+        Source: <a href="https://github.com/advillalba/ccar-p" target="_blank" rel="noopener noreferrer">github.com/advillalba/ccar-p</a>.
+      </p>
+    </div>
+  </section>
+</Public>

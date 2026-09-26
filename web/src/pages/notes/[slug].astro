@@ -1,0 +1,183 @@
+---
+export const prerender = false;
+import Public from '../../layouts/Public.astro';
+import { apiGet, cookieFromRequest, formatDate, formatReadingTime, isNotFound, isServiceUnavailable, markdownBlocks, normalizeNote, referenceHref, type Note, type BreadcrumbItem } from '../../lib';
+
+const { slug } = Astro.params;
+
+if (!slug || typeof slug !== 'string') {
+  return new Response('Not found', { status: 404 });
+}
+
+const cookie = cookieFromRequest(Astro.request);
+const result = await apiGet<Note>(`/api/v1/notes/${encodeURIComponent(slug)}`, cookie);
+
+const breadcrumbs: BreadcrumbItem[] = [
+  { label: 'Home', href: '/' },
+  { label: 'Notes', href: '/notes' },
+  { label: '...' }
+];
+
+const unavailable = isServiceUnavailable(result);
+const notFound = isNotFound(result);
+const note = result.ok && result.data ? normalizeNote(result.data) : null;
+
+if (result.ok && note) {
+  breadcrumbs[2] = { label: note.title };
+}
+
+const previousNote = note?.previous ?? null;
+const nextNote = note?.next ?? null;
+const references = note?.references ?? [];
+const renderedHTML = note?.html ?? '';
+const blocks = note?.markdown ? markdownBlocks(note.markdown) : [];
+const toc = note?.toc ?? blocks.filter(block => block.kind === 'heading').map(block => ({ id: block.id, text: block.text, level: block.level }));
+---
+<Public
+  title={note ? note.title : 'Note'}
+  description={note ? note.summary : 'CCAR-P study note.'}
+  current="notes"
+  breadcrumbs={breadcrumbs}
+>
+  {notFound && (
+    <section class="page" aria-labelledby="missing-title">
+      <p class="eyebrow">Notes</p>
+      <h1 id="missing-title">Note not available</h1>
+      <p>This note is not published or no longer exists. The <a href="/notes">notes index</a> shows the current published reading list.</p>
+    </section>
+  )}
+  {unavailable && !notFound && (
+    <section class="page" aria-labelledby="unavailable-title">
+      <p class="eyebrow">Notes</p>
+      <h1 id="unavailable-title">Note temporarily unavailable</h1>
+      <div class="alert alert--error" role="alert"><p>The reading service is not responding. Please try again in a moment.</p></div>
+    </section>
+  )}
+  {note && (
+    <article class="page" aria-labelledby="note-title">
+      <p class="eyebrow">{note.domain_name ?? 'Note'}</p>
+      <h1 id="note-title">{note.title}</h1>
+      <dl class="meta">
+        {note.published_at && (
+          <div>
+            <dt>Published</dt>
+            <dd><time datetime={note.published_at}>{formatDate(note.published_at)}</time></dd>
+          </div>
+        )}
+        {note.updated_at && note.updated_at !== note.published_at && (
+          <div>
+            <dt>Updated</dt>
+            <dd><time datetime={note.updated_at}>{formatDate(note.updated_at)}</time></dd>
+          </div>
+        )}
+        <div>
+          <dt>Reading time</dt>
+          <dd>{formatReadingTime(note.reading_time_minutes)}</dd>
+        </div>
+        {note.domain_name && (
+          <div>
+            <dt>Domain</dt>
+            <dd>{note.domain_name}</dd>
+          </div>
+        )}
+      </dl>
+      {note.summary && <p class="page-head__lead">{note.summary}</p>}
+      {toc.length > 0 && (
+        <details class="card toc" open>
+          <summary>Contents</summary>
+          <ol>
+            {toc.map(item => (
+              <li>
+                <a href={`#${item.id}`}>{item.text}</a>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+      {renderedHTML ? (
+        <div class="prose" set:html={renderedHTML} />
+      ) : (
+        <div class="prose">
+          {blocks.map(block => {
+            if (block.kind === 'heading') {
+              if (block.level === 3) return <h3 id={block.id}>{block.text}</h3>;
+              if (block.level >= 4) return <h4 id={block.id}>{block.text}</h4>;
+              return <h2 id={block.id}>{block.text}</h2>;
+            }
+            if (block.kind === 'code') return <pre tabindex="0"><code>{block.text}</code></pre>;
+            if (block.kind === 'quote') return <blockquote><p>{block.text}</p></blockquote>;
+            if (block.kind === 'list') return block.ordered ? <ol>{block.items.map(item => <li>{item}</li>)}</ol> : <ul>{block.items.map(item => <li>{item}</li>)}</ul>;
+            return <p>{block.text}</p>;
+          })}
+        </div>
+      )}
+      {references.length > 0 && (
+        <details class="card refs">
+          <summary>References</summary>
+          <ol>
+            {references.map(reference => {
+              const href = referenceHref(reference);
+              return (
+                <li>
+                  <span>{reference.title}</span>
+                  {href && <a href={href} rel="noopener noreferrer">{reference.url}</a>}
+                  {reference.citation && <span class="muted">{reference.citation}</span>}
+                </li>
+              );
+            })}
+          </ol>
+        </details>
+      )}
+      <nav aria-label="Adjacent notes" class="note-nav">
+        {previousNote ? (
+          <a class="card card--interactive" href={`/notes/${previousNote.slug}`} rel="prev">
+            <small class="muted">Previous note</small>
+            <span>{previousNote.title}</span>
+          </a>
+        ) : (
+          <span aria-hidden="true"></span>
+        )}
+        {nextNote ? (
+          <a class="card card--interactive" href={`/notes/${nextNote.slug}`} rel="next">
+            <small class="muted">Next note</small>
+            <span>{nextNote.title}</span>
+          </a>
+        ) : (
+          <span aria-hidden="true"></span>
+        )}
+      </nav>
+    </article>
+  )}
+</Public>
+<style>
+  .toc summary,
+  .refs summary {
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .toc ol,
+  .refs ol {
+    margin: 0.7rem 0 0;
+  }
+  .refs li {
+    display: grid;
+    gap: 0.2rem;
+  }
+  .note-nav {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.7rem;
+  }
+  .note-nav > a {
+    display: grid;
+    gap: 0.2rem;
+  }
+  .note-nav > a > :last-child {
+    font-weight: 650;
+  }
+  @media (max-width: 30rem) {
+    .note-nav {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

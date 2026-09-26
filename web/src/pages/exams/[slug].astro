@@ -1,0 +1,92 @@
+---
+export const prerender = false;
+import Public from '../../layouts/Public.astro';
+import { apiGet, cookieFromRequest, formatDifficulty, formatTimeLimit, isNotFound, isServiceUnavailable, type Exam, type BreadcrumbItem } from '../../lib';
+
+const { slug } = Astro.params;
+
+if (!slug || typeof slug !== 'string') {
+  return new Response('Not found', { status: 404 });
+}
+
+const cookie = cookieFromRequest(Astro.request);
+const result = await apiGet<Exam>(`/api/v1/exams/${encodeURIComponent(slug)}`, cookie);
+
+const breadcrumbs: BreadcrumbItem[] = [
+  { label: 'Home', href: '/' },
+  { label: 'Exams', href: '/exams' },
+  { label: '...' }
+];
+
+const unavailable = isServiceUnavailable(result);
+const notFound = isNotFound(result);
+const exam = result.ok ? result.data : null;
+
+if (result.ok && exam) {
+  breadcrumbs[2] = { label: exam.title };
+}
+
+function difficultyBadgeClass(difficulty: string): string {
+  if (difficulty === 'beginner' || difficulty === 'easy') return 'badge badge--success';
+  if (difficulty === 'intermediate' || difficulty === 'medium') return 'badge badge--warning';
+  if (difficulty === 'advanced' || difficulty === 'hard') return 'badge badge--danger';
+  if (difficulty === 'exam_scenarios' || difficulty === 'exam-scenarios') return 'badge badge--exam-scenarios';
+  return 'badge';
+}
+---
+<Public title={exam ? exam.title : 'Exam'} current="exams" breadcrumbs={breadcrumbs}>
+  {notFound && (
+    <section class="page" aria-labelledby="missing-title">
+      <div class="page-head">
+        <p class="eyebrow">Exams</p>
+        <h1 id="missing-title">Exam not available</h1>
+      </div>
+      <p>This exam is not published or no longer exists. The <a href="/exams">exams index</a> shows the current published practice list.</p>
+    </section>
+  )}
+  {unavailable && !notFound && (
+    <section class="page" aria-labelledby="unavailable-title">
+      <div class="page-head">
+        <p class="eyebrow">Exams</p>
+        <h1 id="unavailable-title">Exam temporarily unavailable</h1>
+      </div>
+      <p role="alert" aria-live="assertive">The exam service is not responding. Please try again in a moment.</p>
+    </section>
+  )}
+  {exam && (
+    <section class="page" aria-labelledby="exam-title">
+      <div class="page-head">
+        <p class="eyebrow">Practice exam</p>
+        <h1 id="exam-title">{exam.title}</h1>
+        {exam.description && <p class="page-head__lead">{exam.description}</p>}
+      </div>
+      <div class="card">
+        <dl class="meta">
+          <div>
+            <dt>Difficulty</dt>
+            <dd><span class={difficultyBadgeClass(exam.difficulty)}>{formatDifficulty(exam.difficulty)}</span></dd>
+          </div>
+          <div>
+            <dt>Questions</dt>
+            <dd class="num">{exam.question_count}</dd>
+          </div>
+          <div>
+            <dt>Time limit</dt>
+            <dd class="num">{formatTimeLimit(exam.time_limit_minutes)}</dd>
+          </div>
+          {typeof exam.pass_percentage === 'number' && (
+            <div>
+              <dt>Pass mark</dt>
+              <dd class="num">{exam.pass_percentage}%</dd>
+            </div>
+          )}
+        </dl>
+        <div class="btnrow">
+          <a class="btn btn--primary" href={`/exams/${encodeURIComponent(exam.slug)}/start`}>Start exam</a>
+          <a class="btn btn--secondary" href="/notes">Browse notes</a>
+        </div>
+      </div>
+      <p class="callout callout--muted">Answers are checked instantly as you go, so you see the correct answer and explanation for each question immediately.</p>
+    </section>
+  )}
+</Public>

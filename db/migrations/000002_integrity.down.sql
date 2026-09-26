@@ -1,0 +1,16 @@
+DROP INDEX IF EXISTS exams_search_idx, notes_search_idx;
+DROP FUNCTION IF EXISTS cleanup_expired_sessions(integer);
+DROP TRIGGER IF EXISTS answer_option_membership ON attempt_answers;
+DROP FUNCTION IF EXISTS enforce_option_question_membership();
+DROP TRIGGER IF EXISTS published_question_correctness_option ON question_options;
+DROP FUNCTION IF EXISTS enforce_published_option_correctness();
+DROP TRIGGER IF EXISTS published_question_correctness_exam ON exams;
+DROP TRIGGER IF EXISTS published_question_correctness_question ON questions;
+DROP FUNCTION IF EXISTS enforce_published_question_correctness();
+DROP TRIGGER IF EXISTS attempts_updated_at ON attempts;
+DROP TRIGGER IF EXISTS questions_updated_at ON questions;
+DROP TRIGGER IF EXISTS exams_updated_at ON exams;
+DROP TRIGGER IF EXISTS notes_updated_at ON notes;
+DROP TRIGGER IF EXISTS domains_updated_at ON domains;
+DROP TRIGGER IF EXISTS users_updated_at ON users;
+DROP FUNCTION IF EXISTS set_updated_at();

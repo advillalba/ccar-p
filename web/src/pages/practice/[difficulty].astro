@@ -1,0 +1,108 @@
+---
+export const prerender = false;
+import Public from '../../layouts/Public.astro';
+import PracticeRunner from '../../islands/PracticeRunner';
+import PracticeDomainFilter from '../../islands/PracticeDomainFilter';
+import { apiGet, formatDifficulty, isNotFound, isServiceUnavailable, type PracticeQuestion, type Domain, type BreadcrumbItem } from '../../lib';
+
+const difficulties = ['beginner', 'intermediate', 'advanced', 'exam_scenarios'] as const;
+
+const requested = Astro.params.difficulty;
+const difficulty = difficulties.find(value => value === requested);
+
+if (!difficulty) {
+  return new Response('Not found', { status: 404 });
+}
+
+const difficultyLabel = formatDifficulty(difficulty);
+
+// Parse domain filter from query (supports domains,domain,domain_id,domain_ids comma-separated or repeated)
+const parseDomainParam = (url: URL): string[] => {
+  const values: string[] = [];
+  for (const key of ['domains','domain','domain_id','domain_ids','domainIds']) {
+    for (const v of url.searchParams.getAll(key)) {
+      for (const part of v.split(',')) {
+        const t = part.trim();
+        if (t) values.push(t);
+      }
+    }
+  }
+  // dedup
+  return [...new Set(values)];
+};
+const selectedDomains = parseDomainParam(Astro.url);
+const domainsQuery = selectedDomains.length ? `&domains=${selectedDomains.map(encodeURIComponent).join(',')}` : '';
+const questionsResult = await apiGet<PracticeQuestion[]>(`/api/v1/practice/questions?difficulty=${difficulty}${domainsQuery}`, Astro.request.headers.get('cookie'));
+const notFound = isNotFound(questionsResult);
+const unavailable = isServiceUnavailable(questionsResult);
+const questions = questionsResult.ok ? (questionsResult.data ?? []) : [];
+
+const domainsResult = await apiGet<Domain[]>('/api/v1/domains', Astro.request.headers.get('cookie'));
+const domains = domainsResult.ok && domainsResult.data ? domainsResult.data : [];
+
+// Resolve selected slugs/ids to IDs for highlighting (match backend logic: slug or id)
+const selectedIds = (() => {
+  if (!selectedDomains.length || !domains.length) return selectedDomains;
+  const bySlug = new Map<string,string>();
+  const byId = new Set<string>();
+  for (const d of domains) {
+    byId.add(d.id);
+    bySlug.set(d.slug.toLowerCase(), d.id);
+    bySlug.set(d.id.toLowerCase(), d.id);
+  }
+  const resolved: string[] = [];
+  for (const tok of selectedDomains) {
+    const lower = tok.toLowerCase();
+    if (bySlug.has(lower)) resolved.push(bySlug.get(lower)!);
+    else if (byId.has(tok)) resolved.push(tok);
+    else resolved.push(tok);
+  }
+  return [...new Set(resolved)];
+})();
+
+const breadcrumbs: BreadcrumbItem[] = [
+  { label: 'Home', href: '/' },
+  { label: 'Practice', href: '/practice' },
+  { label: difficultyLabel }
+];
+---
+<Public title={`Practice: ${difficultyLabel}`} current="practice" breadcrumbs={breadcrumbs}>
+  {notFound && (
+    <section class="page" aria-labelledby="practice-missing">
+      <div class="page-head">
+        <p class="eyebrow">Practice</p>
+        <h1 id="practice-missing">Practice not available</h1>
+      </div>
+      <p>Practice questions are not available. The <a href="/practice">practice hub</a> lists the current difficulties.</p>
+    </section>
+  )}
+  {unavailable && !notFound && (
+    <section class="page" aria-labelledby="practice-unavailable">
+      <div class="page-head">
+        <p class="eyebrow">Practice</p>
+        <h1 id="practice-unavailable">Practice temporarily unavailable</h1>
+      </div>
+      <div class="alert alert--error" role="alert">
+        <p>The question service is not responding. Please try again in a moment.</p>
+      </div>
+    </section>
+  )}
+  {!notFound && !unavailable && (
+    <section class="page" aria-labelledby="practice-title">
+      <div class="page-head">
+        <p class="eyebrow">Continuous practice</p>
+        <h1 id="practice-title">{difficultyLabel} practice</h1>
+      </div>
+      <PracticeDomainFilter client:load domains={domains} selected={selectedIds} difficulty={difficulty} />
+      {questions.length === 0 ? (
+        <div class="empty">
+          <h2>No questions yet</h2>
+          <p>No questions are available for this selection{selectedIds.length ? ' (try clearing the domain filter)' : ''}.</p>
+          <p><a href="/practice">Back to practice</a></p>
+        </div>
+      ) : (
+        <PracticeRunner client:load difficulty={difficulty} questions={questions} domains={selectedIds} />
+      )}
+    </section>
+  )}
+</Public>

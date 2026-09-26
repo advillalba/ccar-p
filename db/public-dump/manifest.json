@@ -1,0 +1,11 @@
+{
+  "generated_at": "2026-09-24T20:19:47Z",
+  "schema_version": 13,
+  "users": 1,
+  "domains": 12,
+  "exams": 34,
+  "exam_versions": 34,
+  "questions": 822,
+  "question_options": 3332,
+  "question_references": 0
+}

@@ -1,0 +1,25 @@
+---
+import Public from '../../layouts/Public.astro';
+import StaticPracticeHub from '../../islands/static/StaticPracticeHub';
+import { countsByDifficulty } from '../../data/dump';
+
+const publicBase = (import.meta.env as unknown as Record<string, string | undefined>).PUBLIC_BASE_PATH ?? '';
+const basePath = `${publicBase}/site`;
+---
+<Public title="CCAR-P Practice" current="practice" staticMode={true}>
+  <section class="page" aria-labelledby="site-title">
+    <div class="page-head">
+      <p class="eyebrow">Static edition</p>
+      <h1 id="site-title">CCAR-P Practice</h1>
+      <p class="page-head__lead">Drill the question bank by difficulty. Answers are graded in your browser, progress is kept in this browser only, and no account is needed.</p>
+    </div>
+    <StaticPracticeHub counts={countsByDifficulty} basePath={basePath} />
+    <div class="card" style="margin-top:1rem">
+      <strong>Independent, unofficial study material.</strong>
+      <p class="muted" style="margin:.2rem 0 0;font-size:.9em">
+        A read-only snapshot of the practice bank, published to GitHub Pages. Verify everything against authoritative sources.
+        Source: <a href="https://github.com/advillalba/ccar-p" target="_blank" rel="noopener noreferrer">github.com/advillalba/ccar-p</a>.
+      </p>
+    </div>
+  </section>
+</Public>

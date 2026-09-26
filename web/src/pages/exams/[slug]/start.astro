@@ -1,0 +1,138 @@
+---
+export const prerender = false;
+import Public from '../../../layouts/Public.astro';
+import { apiGet, apiPostWithCookies, cookieFromRequest, cookieValue, formatDifficulty, formatTimeLimit, isNotFound, isServiceUnavailable, type Exam, type BreadcrumbItem } from '../../../lib';
+
+const { slug } = Astro.params;
+
+if (!slug || typeof slug !== 'string') {
+  return new Response('Not found', { status: 404 });
+}
+
+const cookie = cookieFromRequest(Astro.request);
+const examResult = await apiGet<Exam>(`/api/v1/exams/${encodeURIComponent(slug)}`, cookie);
+
+const breadcrumbs: BreadcrumbItem[] = [
+  { label: 'Home', href: '/' },
+  { label: 'Exams', href: '/exams' },
+  { label: '...', href: `/exams/${slug}` },
+  { label: 'Start' }
+];
+
+const exam = examResult.ok ? examResult.data : null;
+const csrfToken = cookieValue(Astro.request, 'ccarp_csrf');
+const notFound = isNotFound(examResult);
+const unavailable = isServiceUnavailable(examResult);
+
+let startedAttemptId: string | null = null;
+let startError: string | null = null;
+
+if (exam && Astro.request.method === 'POST') {
+  const { result: startResult, setCookies } = await apiPostWithCookies<{ id: string }>(`/api/v1/exams/${exam.id}/attempts`, {}, cookie, csrfToken);
+  if (startResult.ok && startResult.data) {
+    startedAttemptId = startResult.data.id;
+    const guestCookie = setCookies.find(value => value.startsWith('ccarp_guest='));
+    if (guestCookie) {
+      const token = guestCookie.slice('ccarp_guest='.length).split(';')[0];
+      Astro.cookies.set('ccarp_guest', token, {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 180 * 24 * 60 * 60,
+        secure: guestCookie.includes('Secure')
+      });
+    }
+  } else if (startResult.status === 0 || startResult.status >= 500) {
+    startError = 'The exam service is unavailable. Please try again in a moment.';
+  } else {
+    startError = 'We could not start your attempt. Please retry.';
+  }
+}
+
+if (startedAttemptId) {
+  return Astro.redirect(`/attempts/${startedAttemptId}`, 303);
+}
+
+if (exam) {
+  breadcrumbs[2] = { label: exam.title, href: `/exams/${slug}` };
+}
+---
+<Public title={exam ? `Start ${exam.title}` : 'Start exam'} current="exams" breadcrumbs={breadcrumbs}>
+  {notFound && (
+    <section class="page" aria-labelledby="missing-title">
+      <div class="page-head">
+        <p class="eyebrow">Exams</p>
+        <h1 id="missing-title">Exam not available</h1>
+      </div>
+      <p>This exam is not published or no longer exists.</p>
+      <p><a href="/exams">Back to exams</a></p>
+    </section>
+  )}
+  {unavailable && !notFound && (
+    <section class="page" aria-labelledby="unavailable-title">
+      <div class="page-head">
+        <p class="eyebrow">Exams</p>
+        <h1 id="unavailable-title">Exam temporarily unavailable</h1>
+      </div>
+      <p role="alert" aria-live="assertive">The exam service is not responding. Please try again in a moment.</p>
+    </section>
+  )}
+  {exam && !notFound && !unavailable && !startError && (
+    <section class="page" aria-labelledby="start-title">
+      <div class="page-head">
+        <p class="eyebrow">Interactive exam</p>
+        <h1 id="start-title">Start {exam.title}</h1>
+        <p class="page-head__lead">You can take this practice exam without an account. Your answers are checked instantly and saved to this browser; sign in to keep your history across devices.</p>
+      </div>
+      <div class="card">
+        <dl class="meta">
+          <div>
+            <dt>Difficulty</dt>
+            <dd>{formatDifficulty(exam.difficulty)}</dd>
+          </div>
+          <div>
+            <dt>Questions</dt>
+            <dd class="num">{exam.question_count}</dd>
+          </div>
+          <div>
+            <dt>Time limit</dt>
+            <dd class="num">{formatTimeLimit(exam.time_limit_minutes)}</dd>
+          </div>
+          {typeof exam.pass_percentage === 'number' && (
+            <div>
+              <dt>Pass mark</dt>
+              <dd class="num">{exam.pass_percentage}%</dd>
+            </div>
+          )}
+        </dl>
+        <form method="post">
+          <button class="btn btn--primary" type="submit">Create attempt</button>
+        </form>
+      </div>
+      <noscript>
+        <aside class="noscript-note">
+          <h2>Completing the exam</h2>
+          <p>Answering questions requires JavaScript. You can still <a href="/notes">read study notes</a> and <a href={`/exams/${encodeURIComponent(slug)}`}>review exam details</a>.</p>
+        </aside>
+      </noscript>
+    </section>
+  )}
+  {exam && !notFound && !unavailable && startError && (
+    <section class="page" aria-labelledby="start-error-title">
+      <div class="page-head">
+        <p class="eyebrow">Exams</p>
+        <h1 id="start-error-title">Could not start the exam</h1>
+      </div>
+      <div class="alert alert--error" role="alert" aria-live="assertive">
+        <p>{startError}</p>
+      </div>
+      <p><a href={`/exams/${encodeURIComponent(slug)}`}>Back to exam details</a></p>
+    </section>
+  )}
+</Public>
+
+<style>
+  .card .meta {
+    margin-bottom: 1.1rem;
+  }
+</style>
