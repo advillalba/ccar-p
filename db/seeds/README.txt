@@ -1,1 +1,0 @@
-Development seed execution is implemented by cmd/seed and internal/store/seed.go. Seed SQL remains parameterized and transactional in Go so the administrator password can be hashed without writing plaintext credentials to disk.
