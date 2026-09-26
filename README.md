@@ -4,6 +4,8 @@ A Go, PostgreSQL, and Astro foundation for focused study notes, practice exams, 
 
 **→ [Practice now — 822 questions, instant grading, no signup](https://advillalba.github.io/ccar-p/site/)**
 
+> **Status: finished, not actively maintained.** Question bank current as of September 2026. Everything here is MIT-licensed: take it, extend it, make it yours.
+
 **Live practice, no setup:** the public dump also powers a static practice site (822 questions, 4 difficulty levels, instant grading, progress kept in your browser). Every push to `main` deploys it via [`.github/workflows/gh-pages.yml`](.github/workflows/gh-pages.yml) — enable *Settings → Pages → Source: GitHub Actions* once. Serve it locally with:
 
 ```sh
@@ -73,6 +75,23 @@ Set `TEST_DATABASE_URL` to run PostgreSQL integration tests. See `docs/local-dev
 | `docs/mcp.md`                         | MCP endpoint, auth, and available tools.       |
 | `docs/content-authoring.md`           | Authoring notes and exams.                     |
 | `docs/public-dump.md`                 | Public dump format, generation, and restore.   |
+
+## FAQ
+
+**Is this official CCAR-P / Anthropic material?**
+No. All questions are independently authored. For exam logistics (dates, pricing, registration) see the official Anthropic or Pearson VUE portals.
+
+**Do I need an account to practice?**
+No. Answers are graded instantly in your browser; progress is kept in a cookie on your device. The full platform (accounts, attempts, publishing) only matters if you self-host.
+
+**How do I self-host?**
+`cp .env.example .env` (fill the placeholders) and `docker compose up --build -d` — see [Start](#start). The public dump imports automatically on first boot.
+
+**How do I add questions?**
+Author them through the admin UI or MCP tools (`docs/content-authoring.md`), then regenerate the dump with `db/export_public_dump.sh` and push — the practice site rebuilds automatically.
+
+**Why is my practice progress not syncing across devices?**
+By design in the static site: progress lives in your browser's cookie, there is no server. Self-host the full stack if you need cross-device sync.
 
 ## License
 
